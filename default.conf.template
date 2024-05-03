@@ -1,0 +1,40 @@
+
+
+map $http_x_api_key $valid_key {
+    default 0;
+    "${API_KEY}" 1; # Use the environment variable directly
+}
+
+server {
+    listen       ${NGINX_PORT};
+    server_name  localhost;
+
+    location @extensions {
+        rewrite ^(/[^/]+)$ $1.jpg last;  # Try appending .jpg
+        rewrite ^(/[^/]+)$ $1.JPG last;  # Try appending .JPG if .jpg does not exist
+    }
+
+    location / {
+        sendfile           on;
+        sendfile_max_chunk 1m;
+        tcp_nopush on;
+        tcp_nodelay       on;
+        keepalive_timeout 65;
+        
+        if ($valid_key = 0) {
+            return 401;
+        }
+
+        expires 1M;
+        access_log off;
+        add_header Cache-Control "private";
+        
+        root /Images;
+        try_files $uri $uri/ @extensions;
+    }
+
+    error_page   500 502 503 504  /50x.html;
+    location = /50x.html {
+        root   /usr/share/nginx/html;
+    }
+}
