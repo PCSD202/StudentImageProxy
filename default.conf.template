@@ -14,6 +14,11 @@ server {
         rewrite ^(/[^/]+)$ $1.JPG last;  # Try appending .JPG if .jpg does not exist
     }
 
+    location /health {
+        default_type text/plain;
+        return 200 "I'm awake, and glad to be alive! Hello world!";;
+    }
+
     location / {
         sendfile           on;
         sendfile_max_chunk 1m;
