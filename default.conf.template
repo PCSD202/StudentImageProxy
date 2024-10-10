@@ -6,7 +6,7 @@ map $http_x_api_key $valid_key {
 }
 
 server {
-    listen       ${NGINX_PORT};
+    listen       80;
     server_name  localhost;
 
     location @extensions {
