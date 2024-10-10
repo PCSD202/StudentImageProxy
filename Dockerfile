@@ -5,4 +5,5 @@ ENV API_KEY API_KEY_HERE
 COPY default.conf.template /etc/nginx/templates/default.conf.template
 VOLUME [ "/Images" ]
 
-CMD nginx -g daemon off;
+ENTRYPOINT ["./entrypoint.sh"]
+CMD ["nginx", "-g", "daemon off;"]
