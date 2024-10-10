@@ -16,7 +16,7 @@ server {
 
     location /health {
         default_type text/plain;
-        return 200 "I'm awake, and glad to be alive! Hello world!";;
+        return 200 "I'm awake, and glad to be alive! Hello world!";
     }
 
     location / {
