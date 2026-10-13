@@ -1,10 +1,16 @@
-FROM nginx:alpine
-RUN apk add --no-cache curl
-ENV API_KEY API_KEY_HERE
-COPY default.conf.template /etc/nginx/templates/default.conf.template
-VOLUME [ "/Images" ]
+# syntax=docker/dockerfile:1.7
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
 
+WORKDIR /src
+COPY go.mod main.go ./
+ARG TARGETOS
+ARG TARGETARCH
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go build -trimpath -ldflags="-s -w" -o /image-proxy .
+
+FROM scratch
+COPY --from=build /image-proxy /image-proxy
+VOLUME ["/Images"]
 EXPOSE 80
-
-ENTRYPOINT ["./docker-entrypoint.sh"]
-CMD ["nginx", "-g", "daemon off;"]
+ENTRYPOINT ["/image-proxy"]
