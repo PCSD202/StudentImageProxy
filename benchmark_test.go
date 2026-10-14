@@ -1,11 +1,14 @@
 package main
 
 import (
+	"encoding/base64"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -80,3 +83,17 @@ type discardResponse struct{ header http.Header }
 func (w *discardResponse) Header() http.Header            { return w.header }
 func (w *discardResponse) WriteHeader(int)                {}
 func (w *discardResponse) Write(data []byte) (int, error) { return len(data), nil }
+
+func BenchmarkSignedAuthorization(b *testing.B) {
+	signer := newSigner("secret", "")
+	expires := strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)
+	query := url.Values{"expires": {expires}, "signature": {base64.RawURLEncoding.EncodeToString(signer.signature("/student-A", expires))}}
+	req := httptest.NewRequest(http.MethodGet, "/student-A?"+query.Encode(), nil)
+	w := &discardResponse{header: make(http.Header)}
+	b.ReportAllocs()
+	for b.Loop() {
+		if !signer.authorize(w, req) {
+			b.Fatal("signature rejected")
+		}
+	}
+}

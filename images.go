@@ -160,7 +160,9 @@ func (s *imageStore) load(name string) (any, error) {
 
 func imageHeaders(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "image/jpeg")
-	w.Header().Set("Cache-Control", "private, max-age=2592000")
+	if w.Header().Get("Cache-Control") == "" {
+		w.Header().Set("Cache-Control", "private, max-age=2592000")
+	}
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 }
 
