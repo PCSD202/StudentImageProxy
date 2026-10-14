@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: student-image-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: student-image-proxy
+  template:
+    metadata:
+      labels:
+        app: student-image-proxy
+    spec:
+      containers:
+        - name: image-proxy
+          image: ghcr.io/pcsd202/studentimageproxy:latest
+          ports:
+            - name: http
+              containerPort: 80
+          env:
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: student-image-proxy
+                  key: api-key
+            - name: MEMORY_LIMIT_BYTES
+              valueFrom:
+                resourceFieldRef:
+                  containerName: image-proxy
+                  resource: limits.memory
+                  divisor: "1"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: images
+              mountPath: /Images
+              readOnly: true
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+      volumes:
+        - name: images
+          persistentVolumeClaim:
+            claimName: student-images
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: student-image-proxy
+spec:
+  selector:
+    app: student-image-proxy
+  ports:
+    - port: 80
+      targetPort: http
