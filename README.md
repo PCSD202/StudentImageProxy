@@ -19,7 +19,29 @@ docker run --rm -p 8080:80 \
 curl -H 'X-API-Key: your-secret-key' http://localhost:8080/1114892
 ```
 
-`API_KEY` is required. `IMAGE_DIR` and `PORT` are optional for running outside Docker. The image mount must be readable by the container. The server supports `GET`, `HEAD`, byte ranges, and conditional requests. Successful responses have `Content-Type: image/jpeg` and a private one-month cache lifetime.
+`API_KEY` is required. `IMAGE_DIR` and `PORT` are optional for running outside Docker. The image mount must be readable by the container. The server supports `GET`, `HEAD`, byte ranges, and conditional requests. Successful responses have `Content-Type: image/jpeg` and a private one-month cache lifetime when authenticated with an API key.
+
+## Signed image URLs
+
+Your backend can create a URL for one student image, then pass it to a browser for use in an `<img src="...">`. The browser does not need the API key. Set `PUBLIC_BASE_URL` to the image service's public origin, such as `https://images.example.org`. When unset, the response contains a relative URL for your backend to combine with that origin. The app uses this configured address rather than inferring it from ingress headers.
+
+```sh
+curl -X POST -H 'X-API-Key: your-secret-key' \
+  'https://images.example.org/presign?id=1114892'
+```
+
+```json
+{
+  "url": "https://images.example.org/1114892?expires=1800003600&signature=...",
+  "expires_at": "2027-01-15T09:00:00Z"
+}
+```
+
+URLs default to one hour. Supply `expires_in` in seconds for a shorter lifetime, from 1 to 3600. URL-encode the `id` query parameter; bare IDs and IDs ending in `.jpg` or `.JPG` work. An ID absent from the current filename index returns `404`. The signing endpoint requires the API key and returns `Cache-Control: no-store`.
+
+The signature authenticates the requested image path and expiration using HMAC-SHA256 with a signing key derived from `API_KEY`. It permits `GET` and `HEAD`, including ranges, and does not grant access to `/metrics` or `/presign`. Every Kubernetes replica must use the same API key; rotating it invalidates existing URLs. Anyone holding a URL can retrieve that image until it expires, so your backend should issue it only after checking the client's access to that student. Expiration prevents future retrievals; it cannot revoke bytes already downloaded.
+
+Signed image responses use a private browser cache lifetime capped at the URL's remaining validity. Cached image bytes remain shared with API-key requests inside the server; authentication is still checked for every request. Use HTTPS for the public image service. Browsers can load these URLs directly in image tags without CORS configuration; JavaScript access to response bytes across origins requires CORS configuration at your ingress.
 
 ## CI and publishing
 

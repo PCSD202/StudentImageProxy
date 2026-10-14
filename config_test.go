@@ -37,3 +37,18 @@ func TestInvalidConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestPublicBaseURL(t *testing.T) {
+	for _, value := range []string{"https://images.example.org", "http://localhost:8080/", ""} {
+		t.Setenv("PUBLIC_BASE_URL", value)
+		if _, err := loadConfig(); err != nil {
+			t.Fatal(value, err)
+		}
+	}
+	for _, value := range []string{"images.example.org", "//images.example.org", "ftp://images.example.org", "https://user:pass@images.example.org", "https://images.example.org/path", "https://images.example.org?x=y", "https://images.example.org#fragment"} {
+		t.Setenv("PUBLIC_BASE_URL", value)
+		if _, err := loadConfig(); err == nil {
+			t.Fatal("invalid public base URL accepted", value)
+		}
+	}
+}

@@ -1,8 +1,6 @@
 package main
 
 import (
-	"crypto/sha256"
-	"crypto/subtle"
 	"errors"
 	"log"
 	"net/http"
@@ -37,7 +35,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              ":" + port,
-		Handler:           newHandler(images, key),
+		Handler:           imageHandler(images, newSigner(key, config.publicBaseURL)),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	log.Printf("serving %d indexed images from %s on port %s; cache budget %d bytes", len(images.index.Load().names), imageDir, port, config.cacheBytes)
@@ -45,8 +43,10 @@ func main() {
 }
 
 func newHandler(images *imageStore, key string) http.Handler {
-	expectedKey := sha256.Sum256([]byte(key))
+	return imageHandler(images, newSigner(key, ""))
+}
 
+func imageHandler(images *imageStore, signer *urlSigner) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/health" {
 			if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -59,8 +59,12 @@ func newHandler(images *imageStore, key string) http.Handler {
 			return
 		}
 
-		providedKey := sha256.Sum256([]byte(r.Header.Get("X-API-Key")))
-		if subtle.ConstantTimeCompare(expectedKey[:], providedKey[:]) != 1 {
+		if r.URL.Path == "/presign" {
+			signer.presign(w, r, images)
+			return
+		}
+		if !signer.hasAPIKey(r) && (r.URL.Path == "/metrics" || !signer.authorize(w, r)) {
+			w.Header().Set("Cache-Control", "no-store")
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}

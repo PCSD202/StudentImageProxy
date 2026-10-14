@@ -19,6 +19,8 @@ spec:
             - name: http
               containerPort: 80
           env:
+            # Set PUBLIC_BASE_URL to your ingress origin to return absolute
+            # signed URLs, for example https://images.example.org.
             - name: API_KEY
               valueFrom:
                 secretKeyRef:
