@@ -7,12 +7,15 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
 
 func main() {
+	config, err := loadConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
 	key := os.Getenv("API_KEY")
 	if key == "" {
 		log.Fatal("API_KEY must be set")
@@ -22,6 +25,11 @@ func main() {
 	if imageDir == "" {
 		imageDir = "/Images"
 	}
+	images, err := newImageStore(imageDir, config)
+	if err != nil {
+		log.Fatal(err)
+	}
+	go images.refreshEvery(config.indexRefresh)
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "80"
@@ -29,14 +37,14 @@ func main() {
 
 	server := &http.Server{
 		Addr:              ":" + port,
-		Handler:           newHandler(imageDir, key),
+		Handler:           newHandler(images, key),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-	log.Printf("serving images from %s on port %s", imageDir, port)
+	log.Printf("serving %d indexed images from %s on port %s; cache budget %d bytes", len(images.index.Load().names), imageDir, port, config.cacheBytes)
 	log.Fatal(server.ListenAndServe())
 }
 
-func newHandler(imageDir, key string) http.Handler {
+func newHandler(images *imageStore, key string) http.Handler {
 	expectedKey := sha256.Sum256([]byte(key))
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -61,43 +69,16 @@ func newHandler(imageDir, key string) http.Handler {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-
-		candidates := imageCandidates(r.URL.Path)
-		if len(candidates) == 0 {
+		if r.URL.Path == "/metrics" {
+			images.metrics(w)
+			return
+		}
+		if err := images.serve(w, r); errors.Is(err, os.ErrNotExist) {
 			http.NotFound(w, r)
-			return
+		} else if err != nil {
+			log.Printf("serve image: %v", err)
+			http.Error(w, "image unavailable", http.StatusInternalServerError)
 		}
-		for _, name := range candidates {
-			file, err := os.Open(filepath.Join(imageDir, name))
-			if errors.Is(err, os.ErrNotExist) {
-				continue
-			}
-			if err != nil {
-				log.Printf("open image %q: %v", name, err)
-				http.Error(w, "image unavailable", http.StatusInternalServerError)
-				return
-			}
-
-			info, err := file.Stat()
-			if err != nil {
-				file.Close()
-				log.Printf("stat image %q: %v", name, err)
-				http.Error(w, "image unavailable", http.StatusInternalServerError)
-				return
-			}
-			if !info.Mode().IsRegular() {
-				file.Close()
-				continue
-			}
-
-			w.Header().Set("Content-Type", "image/jpeg")
-			w.Header().Set("Cache-Control", "private, max-age=2592000")
-			w.Header().Set("X-Content-Type-Options", "nosniff")
-			http.ServeContent(w, r, name, info.ModTime(), file)
-			file.Close()
-			return
-		}
-		http.NotFound(w, r)
 	})
 }
 

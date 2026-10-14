@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestImageRequests(t *testing.T) {
@@ -23,7 +24,11 @@ func TestImageRequests(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	server := httptest.NewServer(newHandler(imageDir, "secret"))
+	images, err := newImageStore(imageDir, config{cacheBytes: 1 << 20, cacheTTL: time.Hour})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(newHandler(images, "secret"))
 	defer server.Close()
 
 	tests := []struct {
@@ -53,6 +58,8 @@ func TestImageRequests(t *testing.T) {
 		{path: "/123/1114892", key: "secret", wantStatus: 404},
 		{path: "/..%5C1114892", key: "secret", wantStatus: 404},
 		{path: "/health", wantStatus: 200, wantBody: "ok\n"},
+		{path: "/metrics", wantStatus: 401},
+		{path: "/metrics", key: "secret", wantStatus: 200},
 	}
 	for _, tt := range tests {
 		t.Run(tt.method+tt.path+tt.key+tt.rangeHeader, func(t *testing.T) {
@@ -85,7 +92,7 @@ func TestImageRequests(t *testing.T) {
 			if tt.method == http.MethodHead && len(body) != 0 {
 				t.Fatalf("HEAD returned a body: %q", body)
 			}
-			if tt.wantStatus == 200 && tt.path != "/health" && resp.Header.Get("Content-Type") != "image/jpeg" {
+			if tt.wantStatus == 200 && tt.path != "/health" && tt.path != "/metrics" && resp.Header.Get("Content-Type") != "image/jpeg" {
 				t.Fatalf("unexpected content type: %q", resp.Header.Get("Content-Type"))
 			}
 		})
